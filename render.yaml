@@ -11,7 +11,7 @@ services:
       - key: VITE_STORE_SLUG
         value: bodega-jl
       - key: VITE_BODEGA_NAME
-        value: "Bodega  JL"
+        value: "Bodega JL"
       - key: VITE_BODEGA_WHATSAPP
         value: "57312228403"
       - key: VITE_BODEGA_PHONE_DISPLAY

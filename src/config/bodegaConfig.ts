@@ -11,7 +11,7 @@ export const BODEGA_CONFIG: StoreProfile = {
   slug: (import.meta.env.VITE_STORE_SLUG as string) || 'bodega-jl',
 
   // 2. Identidad de Marca
-  name: (import.meta.env.VITE_BODEGA_NAME as string) || 'Bodega  JL',
+  name: (import.meta.env.VITE_BODEGA_NAME as string) || 'Bodega JL',
   slogan: (import.meta.env.VITE_BODEGA_SLOGAN as string) || 'Tu tienda de confianza en el barrio',
   iconEmoji: (import.meta.env.VITE_BODEGA_EMOJI as string) || '🏪',
   currencySymbol: (import.meta.env.VITE_BODEGA_CURRENCY as string) || '$',
