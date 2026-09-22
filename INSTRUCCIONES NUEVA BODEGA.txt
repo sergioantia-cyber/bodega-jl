@@ -1,0 +1,1 @@
+powershell -ExecutionPolicy Bypass -File .\scripts\build-apks.ps1 -StoreSlug "don-pedro" -StoreName "Minimarket Don Pedro"

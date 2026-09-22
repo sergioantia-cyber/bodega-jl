@@ -30,8 +30,13 @@ app.use(express.static(distPath, {
   }
 }));
 
-// Fallback para Single Page Application (SPA)
-app.get('*', (req, res) => {
+// Health check para Render
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
+// Fallback para Single Page Application (SPA compatible con Express 5)
+app.use((req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
