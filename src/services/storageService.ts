@@ -192,15 +192,28 @@ export const storageService = {
     try {
       const slug = customSlug || storeService.getActiveSlug();
       const scopedData = localStorage.getItem(getScopedKey(CUSTOMERS_STORAGE_KEY, slug));
+      let rawList: Customer[] | null = null;
       if (scopedData) {
-        return JSON.parse(scopedData);
-      }
-      if (slug === 'bodega-jl') {
+        rawList = JSON.parse(scopedData);
+      } else if (slug === 'bodega-jl') {
         const legacyData = localStorage.getItem(CUSTOMERS_STORAGE_KEY);
         if (legacyData) {
-          return JSON.parse(legacyData);
+          rawList = JSON.parse(legacyData);
         }
       }
+
+      if (rawList && Array.isArray(rawList)) {
+        // Purgar clientes de prueba mock que hayan quedado en caché
+        const cleaned = rawList.filter(c =>
+          !['c-1', 'c-2', 'c-3', 'c-4', 'c-5'].includes(c.id) &&
+          !['Doña Rosa Flores', 'Don Carlos Mendoza', 'Doña Carmen Salazar', 'Juan "El Vecino" Pérez', 'Miguel Ángel Romero'].includes(c.name)
+        );
+        if (cleaned.length !== rawList.length) {
+          this.saveCustomers(cleaned, slug);
+        }
+        return cleaned;
+      }
+
       this.saveCustomers(INITIAL_CUSTOMERS, slug);
       return INITIAL_CUSTOMERS;
     } catch {

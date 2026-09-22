@@ -19,12 +19,14 @@ export const orderDispatchService = {
     try {
       const slug = customSlug || storeService.getActiveSlug();
       const scopedData = localStorage.getItem(getScopedKey(MY_ORDERS_STORAGE_KEY, slug));
-      if (scopedData) return JSON.parse(scopedData);
-      if (slug === 'bodega-jl') {
+      let list: CustomerOrder[] = [];
+      if (scopedData) {
+        list = JSON.parse(scopedData);
+      } else if (slug === 'bodega-jl') {
         const legacyData = localStorage.getItem(MY_ORDERS_STORAGE_KEY);
-        if (legacyData) return JSON.parse(legacyData);
+        if (legacyData) list = JSON.parse(legacyData);
       }
-      return [];
+      return list.filter(o => !o.customerName?.includes('María Elena Ramos') && o.id !== 'ord-1042');
     } catch {
       return [];
     }
@@ -48,12 +50,14 @@ export const orderDispatchService = {
     try {
       const slug = customSlug || storeService.getActiveSlug();
       const scopedData = localStorage.getItem(getScopedKey(ORDERS_STORAGE_KEY, slug));
-      if (scopedData) return JSON.parse(scopedData);
-      if (slug === 'bodega-jl') {
+      let list: CustomerOrder[] = [];
+      if (scopedData) {
+        list = JSON.parse(scopedData);
+      } else if (slug === 'bodega-jl') {
         const legacyData = localStorage.getItem(ORDERS_STORAGE_KEY);
-        if (legacyData) return JSON.parse(legacyData);
+        if (legacyData) list = JSON.parse(legacyData);
       }
-      return [];
+      return list.filter(o => !o.customerName?.includes('María Elena Ramos') && o.id !== 'ord-1042');
     } catch {
       return [];
     }
