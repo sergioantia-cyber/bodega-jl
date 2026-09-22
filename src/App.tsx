@@ -117,7 +117,7 @@ export function App() {
 
     cloudStoreService.fetchStoreProfile(currentSlug).then((remoteProfile) => {
       if (remoteProfile) {
-        storageService.saveStoreProfile(remoteProfile, currentSlug);
+        storageService.saveStoreProfile(remoteProfile, currentSlug, false);
         setStoreProfile(remoteProfile);
         themeService.init(remoteProfile.theme);
       }
@@ -125,7 +125,7 @@ export function App() {
 
     cloudProductService.fetchProducts(currentSlug).then((remoteProducts) => {
       if (remoteProducts && remoteProducts.length > 0) {
-        storageService.saveProducts(remoteProducts, currentSlug);
+        storageService.saveProducts(remoteProducts, currentSlug, false);
         setProducts(remoteProducts);
       }
     });
@@ -198,8 +198,9 @@ export function App() {
     // Suscripción remota vía Supabase Realtime si está activo
     const unsubscribeCloud = cloudStoreService.subscribeToStoreProfile((remoteProfile) => {
       if (remoteProfile) {
-        storageService.saveStoreProfile(remoteProfile, activeSlug);
-        setStoreProfile(storageService.getStoreProfile(activeSlug));
+        storageService.saveStoreProfile(remoteProfile, activeSlug, false);
+        setStoreProfile(remoteProfile);
+        themeService.init(remoteProfile.theme);
       }
     }, activeSlug);
 
@@ -243,7 +244,7 @@ export function App() {
     // Suscripción remota vía Supabase Realtime si está activo
     const unsubscribeCloudProd = cloudProductService.subscribeToProducts((remoteProducts) => {
       if (remoteProducts && Array.isArray(remoteProducts)) {
-        storageService.saveProducts(remoteProducts, activeSlug);
+        storageService.saveProducts(remoteProducts, activeSlug, false);
         setProducts(storageService.getProducts(activeSlug));
       }
     }, activeSlug);

@@ -17,8 +17,8 @@ export const BODEGA_CONFIG: StoreProfile = {
   currencySymbol: (import.meta.env.VITE_BODEGA_CURRENCY as string) || '$',
 
   // 3. Contacto y Despacho WhatsApp
-  whatsappNumber: (import.meta.env.VITE_BODEGA_WHATSAPP as string) || '57312228403',
-  phoneDisplay: (import.meta.env.VITE_BODEGA_PHONE_DISPLAY as string) || '57312228403',
+  whatsappNumber: (import.meta.env.VITE_BODEGA_WHATSAPP as string) || '573227949751',
+  phoneDisplay: (import.meta.env.VITE_BODEGA_PHONE_DISPLAY as string) || '573227949751',
   address: (import.meta.env.VITE_BODEGA_ADDRESS as string) || 'Aguas calientes calle 3',
   schedule: 'Lunes a Domingo: 7:00 AM - 10:00 PM',
   catalogUrl: (import.meta.env.VITE_CATALOG_URL as string) || 'https://bodega-jl.onrender.com',

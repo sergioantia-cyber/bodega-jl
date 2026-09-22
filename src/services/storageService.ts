@@ -75,7 +75,7 @@ export const storageService = {
     }
   },
 
-  saveProducts(products: Product[], customSlug?: string): void {
+  saveProducts(products: Product[], customSlug?: string, syncToCloud: boolean = true): void {
     try {
       const slug = customSlug || storeService.getActiveSlug();
       const sorted = sortProducts(products);
@@ -104,8 +104,10 @@ export const storageService = {
         }
       }
 
-      // 3. Sincronizar en la nube con Supabase si está disponible
-      cloudProductService.pushProducts(sorted, slug).catch(() => {});
+      // 3. Sincronizar en la nube con Supabase si está disponible y syncToCloud es true
+      if (syncToCloud) {
+        cloudProductService.pushProducts(sorted, slug).catch(() => {});
+      }
     } catch {
       // Storage error
     }
@@ -420,7 +422,7 @@ export const storageService = {
     }
   },
 
-  saveStoreProfile(profile: Partial<StoreProfile>, customSlug?: string): StoreProfile {
+  saveStoreProfile(profile: Partial<StoreProfile>, customSlug?: string, syncToCloud: boolean = true): StoreProfile {
     try {
       const current = this.getStoreProfile(customSlug);
 
@@ -486,8 +488,10 @@ export const storageService = {
         }
       }
 
-      // 3. Sincronizar en la nube con Supabase Realtime para clientes remotos
-      cloudStoreService.pushStoreProfile(updated).catch(() => {});
+      // 3. Sincronizar en la nube con Supabase Realtime para clientes remotos (solo si syncToCloud es true)
+      if (syncToCloud) {
+        cloudStoreService.pushStoreProfile(updated).catch(() => {});
+      }
 
       return updated;
     } catch {

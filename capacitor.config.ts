@@ -2,7 +2,7 @@
 
 const config: CapacitorConfig = {
   appId: 'com.bogad.bodegajl',
-  appName: 'Bodega JL',
+  appName: 'BodegaJL',
   webDir: 'dist',
   server: {
     androidScheme: 'https'

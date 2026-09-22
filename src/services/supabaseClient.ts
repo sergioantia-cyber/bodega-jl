@@ -262,31 +262,42 @@ export const cloudStoreService = {
     if (!supabase) return null;
     try {
       const targetId = slug || storeService.getActiveSlug();
-      const { data, error } = await supabase
+      // 1. Buscar coincidencia exacta por ID de tienda
+      const { data } = await supabase
         .from('store_profiles')
         .select('*')
-        .or(`id.eq.${targetId},id.eq.bodega-jl,id.eq.default`)
-        .order('updated_at', { ascending: false })
-        .limit(1)
+        .eq('id', targetId)
         .maybeSingle();
 
-      if (error || !data) return null;
+      let row = data;
+
+      // 2. Si no existe y el slug es distinto a bodega-jl, probar fallback
+      if (!row && targetId !== 'bodega-jl') {
+        const { data: fallbackData } = await supabase
+          .from('store_profiles')
+          .select('*')
+          .eq('id', 'bodega-jl')
+          .maybeSingle();
+        row = fallbackData;
+      }
+
+      if (!row) return null;
 
       return {
-        slug: data.id,
-        name: data.name,
-        slogan: data.slogan,
-        iconEmoji: data.icon_emoji,
-        currencySymbol: data.currency_symbol,
-        whatsappNumber: data.whatsapp_number,
-        phoneDisplay: data.phone_display,
-        address: data.address,
-        schedule: data.schedule,
-        deliveryFee: Number(data.delivery_fee) || 2.00,
-        catalogUrl: data.catalog_url,
-        pedigochosPhone: data.pedigochos_phone || '573227949751',
-        theme: data.theme,
-        payments: data.payments
+        slug: row.id,
+        name: row.name,
+        slogan: row.slogan,
+        iconEmoji: row.icon_emoji,
+        currencySymbol: row.currency_symbol,
+        whatsappNumber: row.whatsapp_number,
+        phoneDisplay: row.phone_display || row.whatsapp_number,
+        address: row.address,
+        schedule: row.schedule,
+        deliveryFee: Number(row.delivery_fee) || 2.00,
+        catalogUrl: row.catalog_url,
+        pedigochosPhone: row.pedigochos_phone || '573227949751',
+        theme: row.theme,
+        payments: row.payments
       };
     } catch {
       return null;
@@ -320,7 +331,7 @@ export const cloudStoreService = {
               iconEmoji: row.icon_emoji,
               currencySymbol: row.currency_symbol,
               whatsappNumber: row.whatsapp_number,
-              phoneDisplay: row.phone_display,
+              phoneDisplay: row.phone_display || row.whatsapp_number,
               address: row.address,
               schedule: row.schedule,
               deliveryFee: Number(row.delivery_fee) || 2.00,

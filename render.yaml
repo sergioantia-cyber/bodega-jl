@@ -13,9 +13,9 @@ services:
       - key: VITE_BODEGA_NAME
         value: "Bodega JL"
       - key: VITE_BODEGA_WHATSAPP
-        value: "57312228403"
+        value: "573227949751"
       - key: VITE_BODEGA_PHONE_DISPLAY
-        value: "57312228403"
+        value: "573227949751"
       - key: VITE_BODEGA_ADDRESS
         value: "Aguas calientes calle 3"
       - key: VITE_CATALOG_URL
