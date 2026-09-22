@@ -87,18 +87,26 @@ self.addEventListener('activate', function(e) {
   Set-Location "$workspace\android"
   & .\gradlew.bat assembleDebug
 
-  # 8. Copiar APKs generadas con nombres limpios
+  # 8. Copiar APKs generadas con nombres limpios (en la carpeta del proyecto y directo al Escritorio de Windows)
   $cleanFileName = ($StoreName -replace '[^a-zA-Z0-9]', '-') -replace '-+', '-'
+  $desktop = [Environment]::GetFolderPath("Desktop")
+
   Copy-Item "$workspace\android\app\build\outputs\apk\debug\app-debug.apk" "$workspace\Bogad.apk" -Force
   Copy-Item "$workspace\android\app\build\outputs\apk\debug\app-debug.apk" "$workspace\$cleanFileName.apk" -Force
   Copy-Item "$workspace\android\app\build\outputs\apk\debug\app-debug.apk" "$workspace\Bogad-Dueño.apk" -Force
   Copy-Item "$workspace\android\app\build\outputs\apk\debug\app-debug.apk" "$workspace\Bogad-Dueno.apk" -Force
   Copy-Item "$workspace\android\app\build\outputs\apk\debug\app-debug.apk" "$workspace\Bogad-Cliente.apk" -Force
 
+  # Copiar directamente a la pantalla del Escritorio de Windows
+  if (Test-Path $desktop) {
+    Copy-Item "$workspace\android\app\build\outputs\apk\debug\app-debug.apk" "$desktop\Bogad.apk" -Force
+    Copy-Item "$workspace\android\app\build\outputs\apk\debug\app-debug.apk" "$desktop\$cleanFileName.apk" -Force
+  }
+
   Write-Host "==========================================" -ForegroundColor Green
   Write-Host "¡APK MULTI-TIENDA GENERADA EXITOSAMENTE!" -ForegroundColor Green
-  Write-Host "APK Principal: $workspace\Bogad.apk" -ForegroundColor Green
-  Write-Host "APK Específica: $workspace\$cleanFileName.apk" -ForegroundColor Green
+  Write-Host "APK en Escritorio: $desktop\$cleanFileName.apk" -ForegroundColor Green
+  Write-Host "APK en Carpeta:    $workspace\$cleanFileName.apk" -ForegroundColor Green
   Write-Host "==========================================" -ForegroundColor Green
 }
 finally {
