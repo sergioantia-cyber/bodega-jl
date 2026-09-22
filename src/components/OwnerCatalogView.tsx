@@ -5,7 +5,7 @@ import { TactileCard } from './ui/TactileCard';
 import { TactileButton } from './ui/TactileButton';
 import { VoiceSearchButton } from './VoiceSearchButton';
 import { EditProductModal } from './EditProductModal';
-import { CATEGORIES } from '../services/productData';
+import { CATEGORIES, sortProducts } from '../services/productData';
 
 interface OwnerCatalogViewProps {
   products: Product[];
@@ -66,7 +66,7 @@ export const OwnerCatalogView: React.FC<OwnerCatalogViewProps> = ({
       );
     }
 
-    return list;
+    return sortProducts(list);
   }, [products, filterMode, selectedCategory, searchQuery]);
 
   return (
@@ -162,7 +162,7 @@ export const OwnerCatalogView: React.FC<OwnerCatalogViewProps> = ({
             className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-slate-900 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm font-bold shadow-tactile-sm focus:outline-none focus:ring-2 focus:ring-bogad-yellow"
           />
         </div>
-        <VoiceSearchButton onTranscript={(term) => setSearchQuery(term)} />
+        <VoiceSearchButton onTranscript={(term: string) => setSearchQuery(term)} />
       </div>
 
       {/* Carrusel de Categorías */}
@@ -347,11 +347,11 @@ export const OwnerCatalogView: React.FC<OwnerCatalogViewProps> = ({
           product={editingProduct}
           isOpen={Boolean(editingProduct)}
           onClose={() => setEditingProduct(null)}
-          onSave={(updated) => {
+          onSave={(updated: Product) => {
             onUpdateProduct(updated);
             setEditingProduct(null);
           }}
-          onDelete={(id) => {
+          onDelete={(id: string) => {
             onDeleteProduct(id);
             setEditingProduct(null);
           }}

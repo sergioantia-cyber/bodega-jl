@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { CustomerOrder, OrderStatus, StoreProfile, Product } from '../types';
 import { storeService } from './storeService';
+import { sortProducts } from './productData';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -369,12 +370,13 @@ export const cloudProductService = {
 
       await supabase.from('products').upsert(rows);
 
-      // 2. Difusión inmediata a todos los clientes conectados a este catálogo
+      // 2. Difusión inmediata a todos los clientes conectados a este catálogo (orden estable)
+      const sorted = sortProducts(products);
       const channel = supabase.channel(`products_sync_${slug}`);
       channel.send({
         type: 'broadcast',
         event: 'PRODUCTS_UPDATED',
-        payload: { storeSlug: slug, products }
+        payload: { storeSlug: slug, products: sorted }
       });
 
       return true;
@@ -419,24 +421,26 @@ export const cloudProductService = {
     try {
       const slug = storeSlug || storeService.getActiveSlug();
 
-      // Consultar productos pertenecientes a esta tienda
+      // Consultar productos pertenecientes a esta tienda con ordenamiento estable
       let { data, error } = await supabase
         .from('products')
         .select('*')
-        .like('id', `${slug}___%`);
+        .like('id', `${slug}___%`)
+        .order('id', { ascending: true });
 
       // Fallback para bodega-jl si aún tiene productos sin prefijo
       if ((!data || data.length === 0) && slug === 'bodega-jl') {
         const fallback = await supabase
           .from('products')
           .select('*')
-          .not('id', 'like', '%___%');
+          .not('id', 'like', '%___%')
+          .order('id', { ascending: true });
         data = fallback.data;
       }
 
       if (error || !data || data.length === 0) return null;
 
-      return data.map((r: any) => {
+      const mapped = data.map((r: any) => {
         const cleanId = r.id.startsWith(`${slug}___`) ? r.id.replace(`${slug}___`, '') : r.id;
         return {
           id: cleanId,
@@ -453,6 +457,8 @@ export const cloudProductService = {
           minStock: Number(r.min_stock) || 3
         };
       });
+
+      return sortProducts(mapped);
     } catch {
       return null;
     }

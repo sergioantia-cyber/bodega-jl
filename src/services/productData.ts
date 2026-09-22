@@ -9,6 +9,35 @@ export const CATEGORIES: Category[] = [
   { id: 'limpieza', name: 'Limpieza', emoji: '🧼', bgAccent: 'bg-emerald-400' }
 ];
 
+/**
+ * Ordenamiento determinista y 100% estable para el catálogo.
+ * Evita que los productos salten o cambien de lugar al azar cuando
+ * se actualiza el stock, se hace una compra o Supabase Realtime sincroniza.
+ */
+export function sortProducts(products: Product[]): Product[] {
+  if (!products || !Array.isArray(products)) return [];
+  return [...products].sort((a, b) => {
+    // 1. Si ambos tienen formato p-X, ordenar numéricamente (p-1, p-2, ..., p-10)
+    const matchA = a.id.match(/^p-(\d+)$/);
+    const matchB = b.id.match(/^p-(\d+)$/);
+    if (matchA && matchB) {
+      return parseInt(matchA[1], 10) - parseInt(matchB[1], 10);
+    }
+    if (matchA && !matchB) return -1;
+    if (!matchA && matchB) return 1;
+
+    // 2. Si son productos con timestamps o números en el ID
+    const numA = parseInt(a.id.replace(/\D/g, ''), 10);
+    const numB = parseInt(b.id.replace(/\D/g, ''), 10);
+    if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+      return numA - numB;
+    }
+
+    // 3. Fallback alfabético por nombre
+    return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
+  });
+}
+
 export const INITIAL_PRODUCTS: Product[] = [
   {
     id: 'p-1',

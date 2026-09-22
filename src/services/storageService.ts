@@ -1,5 +1,5 @@
 import { CartItem, Product, Customer, Sale, DailyClosingReport, StoreProfile, UserRole } from '../types';
-import { INITIAL_PRODUCTS } from './productData';
+import { INITIAL_PRODUCTS, sortProducts } from './productData';
 import { INITIAL_CUSTOMERS } from './customerData';
 import { BODEGA_CONFIG } from '../config/bodegaConfig';
 import { storeService } from './storeService';
@@ -59,42 +59,44 @@ export const storageService = {
       const slug = customSlug || storeService.getActiveSlug();
       const scopedData = localStorage.getItem(getScopedKey(PRODUCTS_STORAGE_KEY, slug));
       if (scopedData) {
-        return JSON.parse(scopedData);
+        return sortProducts(JSON.parse(scopedData));
       }
       if (slug === 'bodega-jl') {
         const legacyData = localStorage.getItem(PRODUCTS_STORAGE_KEY);
         if (legacyData) {
-          return JSON.parse(legacyData);
+          return sortProducts(JSON.parse(legacyData));
         }
       }
-      this.saveProducts(INITIAL_PRODUCTS, slug);
-      return INITIAL_PRODUCTS;
+      const initial = sortProducts(INITIAL_PRODUCTS);
+      this.saveProducts(initial, slug);
+      return initial;
     } catch {
-      return INITIAL_PRODUCTS;
+      return sortProducts(INITIAL_PRODUCTS);
     }
   },
 
   saveProducts(products: Product[], customSlug?: string): void {
     try {
       const slug = customSlug || storeService.getActiveSlug();
-      localStorage.setItem(getScopedKey(PRODUCTS_STORAGE_KEY, slug), JSON.stringify(products));
+      const sorted = sortProducts(products);
+      localStorage.setItem(getScopedKey(PRODUCTS_STORAGE_KEY, slug), JSON.stringify(sorted));
       if (slug === 'bodega-jl') {
-        localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
+        localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(sorted));
       }
 
       // 1. Notificar en la misma ventana (catálogo del cliente)
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('bogad_products_updated', { detail: { slug, products } }));
+        window.dispatchEvent(new CustomEvent('bogad_products_updated', { detail: { slug, products: sorted } }));
 
         // 2. Notificar a otras pestañas/ventanas con BroadcastChannel
         if ('BroadcastChannel' in window) {
           try {
             const prodChannel = new BroadcastChannel(`bogad_products_channel_${slug}`);
-            prodChannel.postMessage({ type: 'PRODUCTS_UPDATED', slug, products });
+            prodChannel.postMessage({ type: 'PRODUCTS_UPDATED', slug, products: sorted });
             prodChannel.close();
 
             const globalProdChannel = new BroadcastChannel('bogad_products_channel');
-            globalProdChannel.postMessage({ type: 'PRODUCTS_UPDATED', slug, products });
+            globalProdChannel.postMessage({ type: 'PRODUCTS_UPDATED', slug, products: sorted });
             globalProdChannel.close();
           } catch {
             // Ignorar
@@ -103,7 +105,7 @@ export const storageService = {
       }
 
       // 3. Sincronizar en la nube con Supabase si está disponible
-      cloudProductService.pushProducts(products, slug).catch(() => {});
+      cloudProductService.pushProducts(sorted, slug).catch(() => {});
     } catch {
       // Storage error
     }

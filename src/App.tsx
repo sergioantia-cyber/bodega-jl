@@ -30,7 +30,7 @@ import { themeService } from './services/themeService';
 import { storeService } from './services/storeService';
 import { orderDispatchService } from './services/orderDispatchService';
 import { cloudStoreService, cloudProductService } from './services/supabaseClient';
-import { CATEGORIES } from './services/productData';
+import { CATEGORIES, sortProducts } from './services/productData';
 import { Product, Customer, Sale, UserRole, CustomerOrder, CartItem, OrderStatus } from './types';
 
 export function App() {
@@ -377,7 +377,7 @@ export function App() {
       );
     }
 
-    return list;
+    return sortProducts(list);
   }, [products, currentTab, selectedCategory, searchQuery, showFavoritesOnly, favorites]);
 
   return (
