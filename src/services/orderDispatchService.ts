@@ -2,56 +2,80 @@ import { CustomerOrder, GPSLocation, OrderStatus } from '../types';
 import { cloudOrderService } from './supabaseClient';
 import { notificationService } from './notificationService';
 import { storageService } from './storageService';
+import { storeService } from './storeService';
 import { BODEGA_CONFIG } from '../config/bodegaConfig';
 
 const ORDERS_STORAGE_KEY = 'bogad_customer_orders';
 const MY_ORDERS_STORAGE_KEY = 'bogad_my_local_orders';
-const channel = typeof window !== 'undefined' && 'BroadcastChannel' in window
-  ? new BroadcastChannel('bogad_orders_channel')
-  : null;
+
+function getScopedKey(baseKey: string, customSlug?: string): string {
+  const target = customSlug || storeService.getActiveSlug();
+  return `${baseKey}_${target}`;
+}
 
 export const orderDispatchService = {
   // Obtener pedidos personales realizados exclusivamente en este dispositivo (Modo Cliente)
-  getMyOrders(): CustomerOrder[] {
+  getMyOrders(customSlug?: string): CustomerOrder[] {
     try {
-      const data = localStorage.getItem(MY_ORDERS_STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+      const slug = customSlug || storeService.getActiveSlug();
+      const scopedData = localStorage.getItem(getScopedKey(MY_ORDERS_STORAGE_KEY, slug));
+      if (scopedData) return JSON.parse(scopedData);
+      if (slug === 'bodega-jl') {
+        const legacyData = localStorage.getItem(MY_ORDERS_STORAGE_KEY);
+        if (legacyData) return JSON.parse(legacyData);
+      }
+      return [];
     } catch {
       return [];
     }
   },
 
   // Guardar pedidos personales de este dispositivo
-  saveMyOrders(orders: CustomerOrder[]): void {
+  saveMyOrders(orders: CustomerOrder[], customSlug?: string): void {
     try {
-      localStorage.setItem(MY_ORDERS_STORAGE_KEY, JSON.stringify(orders));
+      const slug = customSlug || storeService.getActiveSlug();
+      localStorage.setItem(getScopedKey(MY_ORDERS_STORAGE_KEY, slug), JSON.stringify(orders));
+      if (slug === 'bodega-jl') {
+        localStorage.setItem(MY_ORDERS_STORAGE_KEY, JSON.stringify(orders));
+      }
     } catch {
       // Ignorar
     }
   },
 
   // Obtener todos los pedidos recibidos por la tienda (Solo Dueño)
-  getOrders(): CustomerOrder[] {
+  getOrders(customSlug?: string): CustomerOrder[] {
     try {
-      const data = localStorage.getItem(ORDERS_STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+      const slug = customSlug || storeService.getActiveSlug();
+      const scopedData = localStorage.getItem(getScopedKey(ORDERS_STORAGE_KEY, slug));
+      if (scopedData) return JSON.parse(scopedData);
+      if (slug === 'bodega-jl') {
+        const legacyData = localStorage.getItem(ORDERS_STORAGE_KEY);
+        if (legacyData) return JSON.parse(legacyData);
+      }
+      return [];
     } catch {
       return [];
     }
   },
 
   // Guardar lista general de la tienda
-  saveOrders(orders: CustomerOrder[]): void {
+  saveOrders(orders: CustomerOrder[], customSlug?: string): void {
     try {
-      localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
+      const slug = customSlug || storeService.getActiveSlug();
+      localStorage.setItem(getScopedKey(ORDERS_STORAGE_KEY, slug), JSON.stringify(orders));
+      if (slug === 'bodega-jl') {
+        localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
+      }
     } catch {
       // Ignorar errores de cuota
     }
   },
 
   // Crear nuevo pedido (Enviado por el Cliente)
-  createOrder(order: Omit<CustomerOrder, 'id' | 'orderNumber' | 'createdAt' | 'status'>): CustomerOrder {
-    const orders = this.getOrders();
+  createOrder(order: Omit<CustomerOrder, 'id' | 'orderNumber' | 'createdAt' | 'status'>, customSlug?: string): CustomerOrder {
+    const slug = customSlug || storeService.getActiveSlug();
+    const orders = this.getOrders(slug);
     const newOrder: CustomerOrder = {
       ...order,
       id: `ord-${Date.now()}`,
@@ -65,20 +89,26 @@ export const orderDispatchService = {
     };
 
     // 1. Guardar en el historial personal de compras de este dispositivo
-    const myOrders = this.getMyOrders();
-    this.saveMyOrders([newOrder, ...myOrders]);
+    const myOrders = this.getMyOrders(slug);
+    this.saveMyOrders([newOrder, ...myOrders], slug);
 
     // 2. Guardar en los pedidos entrantes del dueño
     const updated = [newOrder, ...orders];
-    this.saveOrders(updated);
+    this.saveOrders(updated, slug);
 
-    // 3. Sincronizar con Supabase en la nube (si está configurado)
-    cloudOrderService.pushOrder(newOrder).catch(() => {});
+    // 3. Sincronizar con Supabase en la nube con aislamiento de tienda
+    cloudOrderService.pushOrder(newOrder, slug).catch(() => {});
 
     // 4. Emitir en vivo al canal Broadcast para sincronización local
-    if (channel) {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
-        channel.postMessage({ type: 'NEW_ORDER', order: newOrder });
+        const storeChannel = new BroadcastChannel(`bogad_orders_channel_${slug}`);
+        storeChannel.postMessage({ type: 'NEW_ORDER', slug, order: newOrder });
+        storeChannel.close();
+
+        const globalChannel = new BroadcastChannel('bogad_orders_channel');
+        globalChannel.postMessage({ type: 'NEW_ORDER', slug, order: newOrder });
+        globalChannel.close();
       } catch {
         // Ignorar
       }
@@ -87,25 +117,32 @@ export const orderDispatchService = {
     return newOrder;
   },
 
-  updateOrderStatus(orderId: string, newStatus: OrderStatus): CustomerOrder[] {
-    const orders = this.getOrders();
+  updateOrderStatus(orderId: string, newStatus: OrderStatus, customSlug?: string): CustomerOrder[] {
+    const slug = customSlug || storeService.getActiveSlug();
+    const orders = this.getOrders(slug);
     const updated = orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o);
-    this.saveOrders(updated);
+    this.saveOrders(updated, slug);
 
     // Actualizar también en el historial personal si está en este dispositivo
-    const myOrders = this.getMyOrders();
+    const myOrders = this.getMyOrders(slug);
     if (myOrders.some(o => o.id === orderId)) {
       const updatedMyOrders = myOrders.map(o => o.id === orderId ? { ...o, status: newStatus } : o);
-      this.saveMyOrders(updatedMyOrders);
+      this.saveMyOrders(updatedMyOrders, slug);
     }
 
     // 1. Actualizar en Supabase
-    cloudOrderService.updateOrderStatus(orderId, newStatus).catch(() => {});
+    cloudOrderService.updateOrderStatus(orderId, newStatus, slug).catch(() => {});
 
     // 2. Emitir localmente
-    if (channel) {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
-        channel.postMessage({ type: 'ORDER_STATUS_CHANGED', orderId, newStatus });
+        const storeChannel = new BroadcastChannel(`bogad_orders_channel_${slug}`);
+        storeChannel.postMessage({ type: 'ORDER_STATUS_CHANGED', slug, orderId, newStatus });
+        storeChannel.close();
+
+        const globalChannel = new BroadcastChannel('bogad_orders_channel');
+        globalChannel.postMessage({ type: 'ORDER_STATUS_CHANGED', slug, orderId, newStatus });
+        globalChannel.close();
       } catch {
         // Ignorar
       }
@@ -115,40 +152,60 @@ export const orderDispatchService = {
   },
 
   // Suscribirse a cambios en tiempo real (Local Broadcast + Supabase Cloud)
-  subscribe(onMessage: (data: { type: string; order?: CustomerOrder; orderId?: string; newStatus?: OrderStatus }) => void): () => void {
+  subscribe(onMessage: (data: { type: string; order?: CustomerOrder; orderId?: string; newStatus?: OrderStatus }) => void, customSlug?: string): () => void {
+    const slug = customSlug || storeService.getActiveSlug();
+
     // Inicializar canal de notificaciones nativas de Android
     notificationService.init();
 
     // Listener local (BroadcastChannel)
     const listener = (event: MessageEvent) => {
+      if (event.data?.slug && event.data.slug !== slug) {
+        return; // Mensaje de otra tienda
+      }
       if (event.data?.type === 'NEW_ORDER' && event.data.order) {
         notificationService.notifyNewOrder(event.data.order);
       }
       onMessage(event.data);
     };
 
-    if (channel) {
-      channel.addEventListener('message', listener);
+    let storeBc: BroadcastChannel | null = null;
+    let globalBc: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        storeBc = new BroadcastChannel(`bogad_orders_channel_${slug}`);
+        storeBc.addEventListener('message', listener);
+
+        globalBc = new BroadcastChannel('bogad_orders_channel');
+        globalBc.addEventListener('message', listener);
+      } catch {
+        // Ignorar
+      }
     }
 
     // Listener en la nube (Supabase Realtime)
     const unsubscribeCloud = cloudOrderService.subscribeToOrders((remoteOrder) => {
-      const current = this.getOrders();
+      const current = this.getOrders(slug);
       const exists = current.some(o => o.id === remoteOrder.id);
       if (!exists) {
-        this.saveOrders([remoteOrder, ...current]);
+        this.saveOrders([remoteOrder, ...current], slug);
         notificationService.notifyNewOrder(remoteOrder);
         onMessage({ type: 'NEW_ORDER', order: remoteOrder });
       } else {
         const updated = current.map(o => o.id === remoteOrder.id ? remoteOrder : o);
-        this.saveOrders(updated);
+        this.saveOrders(updated, slug);
         onMessage({ type: 'ORDER_STATUS_CHANGED', orderId: remoteOrder.id, newStatus: remoteOrder.status });
       }
-    });
+    }, slug);
 
     return () => {
-      if (channel) {
-        channel.removeEventListener('message', listener);
+      if (storeBc) {
+        storeBc.removeEventListener('message', listener);
+        storeBc.close();
+      }
+      if (globalBc) {
+        globalBc.removeEventListener('message', listener);
+        globalBc.close();
       }
       if (unsubscribeCloud) {
         unsubscribeCloud();

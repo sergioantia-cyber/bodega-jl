@@ -258,7 +258,7 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
       paymentMethod,
       storeId: storeProfile.slug,
       paymentReceipt: paymentReceipt
-    });
+    }, storeProfile.slug);
 
     soundService.playSuccessChime();
 

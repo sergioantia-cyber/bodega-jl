@@ -34,6 +34,29 @@ export const storeService = {
   },
 
   /**
+   * Obtiene el slug activo de la tienda actual.
+   * Prioridad: 1. URL (?tienda=slug o subdominio) 2. Perfil guardado 3. Env/Config por defecto ('bodega-jl')
+   */
+  getActiveSlug(): string {
+    const urlSlug = this.getStoreSlugFromUrl();
+    if (urlSlug) return urlSlug;
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('bogad_store_profile');
+        if (saved) {
+          const p = JSON.parse(saved);
+          if (p.slug && typeof p.slug === 'string') {
+            return this.cleanSlug(p.slug);
+          }
+        }
+      }
+    } catch {
+      // Ignorar error al leer storage
+    }
+    return this.cleanSlug((import.meta.env.VITE_STORE_SLUG as string) || 'bodega-jl');
+  },
+
+  /**
    * Limpia un texto para convertirlo en un slug seguro para URLs
    * Ej: "Minimarket Doña María 2" -> "minimarket-dona-maria-2"
    */

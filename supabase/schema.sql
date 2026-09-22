@@ -95,6 +95,20 @@ CREATE TABLE IF NOT EXISTS store_profiles (
 );
 
 -- =========================================================
+-- MIGRACIÓN / COMPATIBILIDAD MULTI-TIENDA (SaaS)
+-- =========================================================
+ALTER TABLE products ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'bodega-jl';
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'bodega-jl';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'bodega-jl';
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'bodega-jl';
+ALTER TABLE daily_closings ADD COLUMN IF NOT EXISTS store_id TEXT NOT NULL DEFAULT 'bodega-jl';
+
+-- Índices de búsqueda optimizados por tienda
+CREATE INDEX IF NOT EXISTS idx_products_store_id ON products(store_id);
+CREATE INDEX IF NOT EXISTS idx_orders_store_id ON orders(store_id);
+CREATE INDEX IF NOT EXISTS idx_customers_store_id ON customers(store_id);
+
+-- =========================================================
 -- SEGURIDAD (RLS) Y PUBLICACIÓN EN TIEMPO REAL
 -- =========================================================
 

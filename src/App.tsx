@@ -103,29 +103,33 @@ export function App() {
     themeService.init(storeProfile.theme);
   }, []);
 
+  const activeSlug = useMemo(() => {
+    return storeService.getStoreSlugFromUrl() || storeProfile.slug || storeService.getActiveSlug();
+  }, [storeProfile.slug]);
+
   // Detección Multi-Tienda y Carga inicial desde la nube (Supabase)
   useEffect(() => {
     const urlSlug = storeService.getStoreSlugFromUrl();
-    const activeSlug = urlSlug || storeProfile.slug || 'bodega-jl';
+    const currentSlug = urlSlug || storeProfile.slug || storeService.getActiveSlug();
     if (urlSlug && urlSlug !== storeProfile.slug) {
       setStoreProfile(prev => ({ ...prev, slug: urlSlug }));
     }
 
-    cloudStoreService.fetchStoreProfile(activeSlug).then((remoteProfile) => {
+    cloudStoreService.fetchStoreProfile(currentSlug).then((remoteProfile) => {
       if (remoteProfile) {
-        storageService.saveStoreProfile(remoteProfile);
+        storageService.saveStoreProfile(remoteProfile, currentSlug);
         setStoreProfile(remoteProfile);
         themeService.init(remoteProfile.theme);
       }
     });
 
-    cloudProductService.fetchProducts().then((remoteProducts) => {
+    cloudProductService.fetchProducts(currentSlug).then((remoteProducts) => {
       if (remoteProducts && remoteProducts.length > 0) {
-        storageService.saveProducts(remoteProducts);
+        storageService.saveProducts(remoteProducts, currentSlug);
         setProducts(remoteProducts);
       }
     });
-  }, []);
+  }, [activeSlug]);
 
   // Limpieza defensiva de pedidos mock heredados en almacenamiento local
   useEffect(() => {
@@ -134,32 +138,36 @@ export function App() {
       if (rawStore && rawStore.includes('María Elena Ramos')) {
         const cleaned = JSON.parse(rawStore).filter((o: any) => !o.customerName?.includes('María Elena Ramos') && o.id !== 'ord-1042');
         localStorage.setItem('bogad_customer_orders', JSON.stringify(cleaned));
-        setStoreOrders(cleaned);
+        if (activeSlug === 'bodega-jl') {
+          setStoreOrders(cleaned);
+        }
       }
       const rawMy = localStorage.getItem('bogad_my_local_orders');
       if (rawMy && rawMy.includes('María Elena Ramos')) {
         const cleaned = JSON.parse(rawMy).filter((o: any) => !o.customerName?.includes('María Elena Ramos') && o.id !== 'ord-1042');
         localStorage.setItem('bogad_my_local_orders', JSON.stringify(cleaned));
-        setMyOrders(cleaned);
+        if (activeSlug === 'bodega-jl') {
+          setMyOrders(cleaned);
+        }
       }
     } catch (e) {
       console.warn('Error purgando pedidos de prueba:', e);
     }
-  }, []);
+  }, [activeSlug]);
 
-  // Suscribirse a nuevos pedidos en tiempo real
+  // Suscribirse a nuevos pedidos en tiempo real para esta tienda
   useEffect(() => {
     const unsubscribe = orderDispatchService.subscribe(() => {
-      setStoreOrders(orderDispatchService.getOrders());
-      setMyOrders(orderDispatchService.getMyOrders());
-    });
+      setStoreOrders(orderDispatchService.getOrders(activeSlug));
+      setMyOrders(orderDispatchService.getMyOrders(activeSlug));
+    }, activeSlug);
     return () => unsubscribe();
-  }, []);
+  }, [activeSlug]);
 
   // Sincronización en tiempo real de cambios en métodos de pago y perfil de tienda
   useEffect(() => {
     const handleProfileUpdate = () => {
-      const fresh = storageService.getStoreProfile();
+      const fresh = storageService.getStoreProfile(activeSlug);
       setStoreProfile(fresh);
       themeService.init(fresh.theme);
     };
@@ -167,7 +175,7 @@ export function App() {
     window.addEventListener('bogad_store_profile_updated', handleProfileUpdate);
     
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'bogad_store_profile') {
+      if (e.key === `bogad_store_profile_${activeSlug}` || (activeSlug === 'bodega-jl' && e.key === 'bogad_store_profile')) {
         handleProfileUpdate();
       }
     };
@@ -176,7 +184,7 @@ export function App() {
     let broadcastChannel: BroadcastChannel | null = null;
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
-        broadcastChannel = new BroadcastChannel('bogad_store_channel');
+        broadcastChannel = new BroadcastChannel(`bogad_store_channel_${activeSlug}`);
         broadcastChannel.addEventListener('message', (event) => {
           if (event.data?.type === 'STORE_PROFILE_UPDATED') {
             handleProfileUpdate();
@@ -190,10 +198,10 @@ export function App() {
     // Suscripción remota vía Supabase Realtime si está activo
     const unsubscribeCloud = cloudStoreService.subscribeToStoreProfile((remoteProfile) => {
       if (remoteProfile) {
-        storageService.saveStoreProfile(remoteProfile);
-        setStoreProfile(storageService.getStoreProfile());
+        storageService.saveStoreProfile(remoteProfile, activeSlug);
+        setStoreProfile(storageService.getStoreProfile(activeSlug));
       }
-    });
+    }, activeSlug);
 
     return () => {
       window.removeEventListener('bogad_store_profile_updated', handleProfileUpdate);
@@ -201,18 +209,18 @@ export function App() {
       if (broadcastChannel) broadcastChannel.close();
       if (unsubscribeCloud) unsubscribeCloud();
     };
-  }, []);
+  }, [activeSlug]);
 
   // Sincronización en tiempo real de productos e inventario (catálogo cliente)
   useEffect(() => {
     const handleProductsUpdate = () => {
-      setProducts(storageService.getProducts());
+      setProducts(storageService.getProducts(activeSlug));
     };
 
     window.addEventListener('bogad_products_updated', handleProductsUpdate);
 
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'bogad_products_data') {
+      if (e.key === `bogad_products_data_${activeSlug}` || (activeSlug === 'bodega-jl' && e.key === 'bogad_products_data')) {
         handleProductsUpdate();
       }
     };
@@ -221,7 +229,7 @@ export function App() {
     let prodBroadcastChannel: BroadcastChannel | null = null;
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
-        prodBroadcastChannel = new BroadcastChannel('bogad_products_channel');
+        prodBroadcastChannel = new BroadcastChannel(`bogad_products_channel_${activeSlug}`);
         prodBroadcastChannel.addEventListener('message', (event) => {
           if (event.data?.type === 'PRODUCTS_UPDATED') {
             handleProductsUpdate();
@@ -235,10 +243,10 @@ export function App() {
     // Suscripción remota vía Supabase Realtime si está activo
     const unsubscribeCloudProd = cloudProductService.subscribeToProducts((remoteProducts) => {
       if (remoteProducts && Array.isArray(remoteProducts)) {
-        storageService.saveProducts(remoteProducts);
-        setProducts(storageService.getProducts());
+        storageService.saveProducts(remoteProducts, activeSlug);
+        setProducts(storageService.getProducts(activeSlug));
       }
-    });
+    }, activeSlug);
 
     return () => {
       window.removeEventListener('bogad_products_updated', handleProductsUpdate);
@@ -246,7 +254,7 @@ export function App() {
       if (prodBroadcastChannel) prodBroadcastChannel.close();
       if (unsubscribeCloudProd) unsubscribeCloudProd();
     };
-  }, []);
+  }, [activeSlug]);
 
   // Gestión de Dark Mode
   useEffect(() => {
@@ -273,19 +281,19 @@ export function App() {
 
   // Manejo de nuevo producto registrado al vuelo con el escáner
   const handleProductRegistered = (newProduct: Product) => {
-    const updated = storageService.addProduct(newProduct);
+    const updated = storageService.addProduct(newProduct, activeSlug);
     setProducts(updated);
   };
 
   // Manejo de modificación de productos por el dueño
   const handleUpdateProduct = (updatedProduct: Product) => {
-    const updated = storageService.updateProduct(updatedProduct);
+    const updated = storageService.updateProduct(updatedProduct, activeSlug);
     setProducts(updated);
   };
 
   // Manejo de eliminación de productos por el dueño
   const handleDeleteProduct = (productId: string) => {
-    const updated = storageService.deleteProduct(productId);
+    const updated = storageService.deleteProduct(productId, activeSlug);
     setProducts(updated);
   };
 
@@ -294,15 +302,16 @@ export function App() {
     sale: Sale,
     debtUpdate?: { customerId: string; amountAdded: number }
   ) => {
-    storageService.recordSale(sale);
+    storageService.recordSale(sale, activeSlug);
     // Descontar inventario en tiempo real
-    const updatedProducts = storageService.decrementStock(sale.items);
+    const updatedProducts = storageService.decrementStock(sale.items, activeSlug);
     setProducts(updatedProducts);
 
     if (debtUpdate) {
       const updatedCustomers = storageService.updateCustomerDebt(
         debtUpdate.customerId,
-        debtUpdate.amountAdded
+        debtUpdate.amountAdded,
+        activeSlug
       );
       setCustomers(updatedCustomers);
     }
@@ -311,27 +320,27 @@ export function App() {
 
   // Manejo de favoritos ❤️
   const handleToggleFavorite = (productId: string) => {
-    const updated = storageService.toggleFavorite(productId);
+    const updated = storageService.toggleFavorite(productId, activeSlug);
     setFavorites(updated);
   };
 
   // Manejo de abonos a deudas de clientes
   const handleUpdateCustomerDebt = (customerId: string, amountChange: number) => {
-    const updatedCustomers = storageService.updateCustomerDebt(customerId, amountChange);
+    const updatedCustomers = storageService.updateCustomerDebt(customerId, amountChange, activeSlug);
     setCustomers(updatedCustomers);
   };
 
   // Manejo de registro de nuevos clientes
   const handleAddCustomer = (newCustomer: Customer) => {
-    const updatedCustomers = storageService.addCustomer(newCustomer);
+    const updatedCustomers = storageService.addCustomer(newCustomer, activeSlug);
     setCustomers(updatedCustomers);
   };
 
   // Manejo de cambio de estado de pedido online (por el dueño)
   const handleUpdateOrderStatus = (orderId: string, newStatus: OrderStatus) => {
-    const updated = orderDispatchService.updateOrderStatus(orderId, newStatus);
+    const updated = orderDispatchService.updateOrderStatus(orderId, newStatus, activeSlug);
     setStoreOrders(updated);
-    setMyOrders(orderDispatchService.getMyOrders());
+    setMyOrders(orderDispatchService.getMyOrders(activeSlug));
   };
 
   // Repetir pedido anterior

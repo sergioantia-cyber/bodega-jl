@@ -14,6 +14,11 @@ const FAVORITES_STORAGE_KEY = 'bogad_favorite_products';
 const CLOSINGS_STORAGE_KEY = 'bogad_daily_closings';
 const DEBT_TEMPLATE_STORAGE_KEY = 'bogad_debt_template';
 
+function getScopedKey(baseKey: string, customSlug?: string): string {
+  const target = customSlug || storeService.getActiveSlug();
+  return `${baseKey}_${target}`;
+}
+
 const DEFAULT_DEBT_TEMPLATE = `👋 Hola {nombre}, te saluda cordialmente {bodega}.
 Te escribimos con aprecio para recordarte tu saldo pendiente de *${'{deuda}'}*.
 Puedes cancelarlo con efectivo o mediante Yape/Plin al *{celular}*.
@@ -21,51 +26,76 @@ Puedes cancelarlo con efectivo o mediante Yape/Plin al *{celular}*.
 
 export const storageService = {
   // --- CARRITO ---
-  getCart(): CartItem[] {
+  getCart(customSlug?: string): CartItem[] {
     try {
-      const data = localStorage.getItem(CART_STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+      const slug = customSlug || storeService.getActiveSlug();
+      const scopedData = localStorage.getItem(getScopedKey(CART_STORAGE_KEY, slug));
+      if (scopedData) return JSON.parse(scopedData);
+      if (slug === 'bodega-jl') {
+        const legacyData = localStorage.getItem(CART_STORAGE_KEY);
+        if (legacyData) return JSON.parse(legacyData);
+      }
+      return [];
     } catch {
       return [];
     }
   },
 
-  saveCart(items: CartItem[]): void {
+  saveCart(items: CartItem[], customSlug?: string): void {
     try {
-      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+      const slug = customSlug || storeService.getActiveSlug();
+      localStorage.setItem(getScopedKey(CART_STORAGE_KEY, slug), JSON.stringify(items));
+      if (slug === 'bodega-jl') {
+        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+      }
     } catch {
       // Storage error
     }
   },
 
   // --- PRODUCTOS Y CONTROL DE STOCK ---
-  getProducts(): Product[] {
+  getProducts(customSlug?: string): Product[] {
     try {
-      const data = localStorage.getItem(PRODUCTS_STORAGE_KEY);
-      if (data) {
-        return JSON.parse(data);
+      const slug = customSlug || storeService.getActiveSlug();
+      const scopedData = localStorage.getItem(getScopedKey(PRODUCTS_STORAGE_KEY, slug));
+      if (scopedData) {
+        return JSON.parse(scopedData);
       }
-      this.saveProducts(INITIAL_PRODUCTS);
+      if (slug === 'bodega-jl') {
+        const legacyData = localStorage.getItem(PRODUCTS_STORAGE_KEY);
+        if (legacyData) {
+          return JSON.parse(legacyData);
+        }
+      }
+      this.saveProducts(INITIAL_PRODUCTS, slug);
       return INITIAL_PRODUCTS;
     } catch {
       return INITIAL_PRODUCTS;
     }
   },
 
-  saveProducts(products: Product[]): void {
+  saveProducts(products: Product[], customSlug?: string): void {
     try {
-      localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
+      const slug = customSlug || storeService.getActiveSlug();
+      localStorage.setItem(getScopedKey(PRODUCTS_STORAGE_KEY, slug), JSON.stringify(products));
+      if (slug === 'bodega-jl') {
+        localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
+      }
 
       // 1. Notificar en la misma ventana (catálogo del cliente)
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('bogad_products_updated', { detail: products }));
+        window.dispatchEvent(new CustomEvent('bogad_products_updated', { detail: { slug, products } }));
 
         // 2. Notificar a otras pestañas/ventanas con BroadcastChannel
         if ('BroadcastChannel' in window) {
           try {
-            const prodChannel = new BroadcastChannel('bogad_products_channel');
-            prodChannel.postMessage({ type: 'PRODUCTS_UPDATED', products });
+            const prodChannel = new BroadcastChannel(`bogad_products_channel_${slug}`);
+            prodChannel.postMessage({ type: 'PRODUCTS_UPDATED', slug, products });
             prodChannel.close();
+
+            const globalProdChannel = new BroadcastChannel('bogad_products_channel');
+            globalProdChannel.postMessage({ type: 'PRODUCTS_UPDATED', slug, products });
+            globalProdChannel.close();
           } catch {
             // Ignorar
           }
@@ -73,37 +103,38 @@ export const storageService = {
       }
 
       // 3. Sincronizar en la nube con Supabase si está disponible
-      cloudProductService.pushProducts(products).catch(() => {});
+      cloudProductService.pushProducts(products, slug).catch(() => {});
     } catch {
       // Storage error
     }
   },
 
-  addProduct(product: Product): Product[] {
-    const current = this.getProducts();
+  addProduct(product: Product, customSlug?: string): Product[] {
+    const current = this.getProducts(customSlug);
     const updated = [product, ...current];
-    this.saveProducts(updated);
+    this.saveProducts(updated, customSlug);
     return updated;
   },
 
-  updateProduct(updatedProduct: Product): Product[] {
-    const current = this.getProducts();
+  updateProduct(updatedProduct: Product, customSlug?: string): Product[] {
+    const current = this.getProducts(customSlug);
     const updated = current.map(p => p.id === updatedProduct.id ? updatedProduct : p);
-    this.saveProducts(updated);
+    this.saveProducts(updated, customSlug);
     return updated;
   },
 
-  deleteProduct(productId: string): Product[] {
-    const current = this.getProducts();
+  deleteProduct(productId: string, customSlug?: string): Product[] {
+    const slug = customSlug || storeService.getActiveSlug();
+    const current = this.getProducts(slug);
     const updated = current.filter(p => p.id !== productId);
-    this.saveProducts(updated);
-    cloudProductService.deleteProduct(productId).catch(() => {});
+    this.saveProducts(updated, slug);
+    cloudProductService.deleteProduct(productId, slug).catch(() => {});
     return updated;
   },
 
   // Descontar stock tras una venta
-  decrementStock(items: CartItem[]): Product[] {
-    const products = this.getProducts();
+  decrementStock(items: CartItem[], customSlug?: string): Product[] {
+    const products = this.getProducts(customSlug);
     const updated = products.map((p) => {
       const soldItem = items.find((i) => i.product.id === p.id);
       if (soldItem) {
@@ -116,60 +147,82 @@ export const storageService = {
       }
       return p;
     });
-    this.saveProducts(updated);
+    this.saveProducts(updated, customSlug);
     return updated;
   },
 
   // --- PRODUCTOS FAVORITOS DEL CLIENTE ---
-  getFavorites(): string[] {
+  getFavorites(customSlug?: string): string[] {
     try {
-      const data = localStorage.getItem(FAVORITES_STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+      const slug = customSlug || storeService.getActiveSlug();
+      const scopedData = localStorage.getItem(getScopedKey(FAVORITES_STORAGE_KEY, slug));
+      if (scopedData) return JSON.parse(scopedData);
+      if (slug === 'bodega-jl') {
+        const legacyData = localStorage.getItem(FAVORITES_STORAGE_KEY);
+        if (legacyData) return JSON.parse(legacyData);
+      }
+      return [];
     } catch {
       return [];
     }
   },
 
-  toggleFavorite(productId: string): string[] {
-    const current = this.getFavorites();
+  toggleFavorite(productId: string, customSlug?: string): string[] {
+    const slug = customSlug || storeService.getActiveSlug();
+    const current = this.getFavorites(slug);
     const exists = current.includes(productId);
     const updated = exists ? current.filter((id) => id !== productId) : [...current, productId];
     try {
-      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(updated));
+      localStorage.setItem(getScopedKey(FAVORITES_STORAGE_KEY, slug), JSON.stringify(updated));
+      if (slug === 'bodega-jl') {
+        localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(updated));
+      }
     } catch {
       // Ignore
     }
     return updated;
   },
 
-  isFavorite(productId: string): boolean {
-    return this.getFavorites().includes(productId);
+  isFavorite(productId: string, customSlug?: string): boolean {
+    return this.getFavorites(customSlug).includes(productId);
   },
 
   // --- CLIENTES Y FIADOS ---
-  getCustomers(): Customer[] {
+  getCustomers(customSlug?: string): Customer[] {
     try {
-      const data = localStorage.getItem(CUSTOMERS_STORAGE_KEY);
-      if (data) {
-        return JSON.parse(data);
+      const slug = customSlug || storeService.getActiveSlug();
+      const scopedData = localStorage.getItem(getScopedKey(CUSTOMERS_STORAGE_KEY, slug));
+      if (scopedData) {
+        return JSON.parse(scopedData);
       }
-      this.saveCustomers(INITIAL_CUSTOMERS);
+      if (slug === 'bodega-jl') {
+        const legacyData = localStorage.getItem(CUSTOMERS_STORAGE_KEY);
+        if (legacyData) {
+          return JSON.parse(legacyData);
+        }
+      }
+      this.saveCustomers(INITIAL_CUSTOMERS, slug);
       return INITIAL_CUSTOMERS;
     } catch {
       return INITIAL_CUSTOMERS;
     }
   },
 
-  saveCustomers(customers: Customer[]): void {
+  saveCustomers(customers: Customer[], customSlug?: string): void {
     try {
-      localStorage.setItem(CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
+      const slug = customSlug || storeService.getActiveSlug();
+      localStorage.setItem(getScopedKey(CUSTOMERS_STORAGE_KEY, slug), JSON.stringify(customers));
+      if (slug === 'bodega-jl') {
+        localStorage.setItem(CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
+      }
     } catch {
       // Storage error
     }
   },
 
-  updateCustomerDebt(customerId: string, amountChange: number): Customer[] {
-    const customers = this.getCustomers();
+  updateCustomerDebt(customerId: string, amountChange: number, customSlug?: string): Customer[] {
+    const slug = customSlug || storeService.getActiveSlug();
+    const customers = this.getCustomers(slug);
     const today = new Date().toISOString().split('T')[0];
     const updated = customers.map((c) => {
       if (c.id === customerId) {
@@ -181,67 +234,101 @@ export const storageService = {
       }
       return c;
     });
-    this.saveCustomers(updated);
+    this.saveCustomers(updated, slug);
     return updated;
   },
 
-  addCustomer(customer: Customer): Customer[] {
-    const current = this.getCustomers();
+  addCustomer(customer: Customer, customSlug?: string): Customer[] {
+    const slug = customSlug || storeService.getActiveSlug();
+    const current = this.getCustomers(slug);
     const updated = [customer, ...current];
-    this.saveCustomers(updated);
+    this.saveCustomers(updated, slug);
     return updated;
   },
 
   // --- PLANTILLA DE COBRANZA AMABLE ---
-  getDebtTemplate(): string {
+  getDebtTemplate(customSlug?: string): string {
     try {
-      return localStorage.getItem(DEBT_TEMPLATE_STORAGE_KEY) || DEFAULT_DEBT_TEMPLATE;
+      const slug = customSlug || storeService.getActiveSlug();
+      const scopedData = localStorage.getItem(getScopedKey(DEBT_TEMPLATE_STORAGE_KEY, slug));
+      if (scopedData) return scopedData;
+      if (slug === 'bodega-jl') {
+        const legacyData = localStorage.getItem(DEBT_TEMPLATE_STORAGE_KEY);
+        if (legacyData) return legacyData;
+      }
+      return DEFAULT_DEBT_TEMPLATE;
     } catch {
       return DEFAULT_DEBT_TEMPLATE;
     }
   },
 
-  saveDebtTemplate(template: string): void {
+  saveDebtTemplate(template: string, customSlug?: string): void {
     try {
-      localStorage.setItem(DEBT_TEMPLATE_STORAGE_KEY, template);
+      const slug = customSlug || storeService.getActiveSlug();
+      localStorage.setItem(getScopedKey(DEBT_TEMPLATE_STORAGE_KEY, slug), template);
+      if (slug === 'bodega-jl') {
+        localStorage.setItem(DEBT_TEMPLATE_STORAGE_KEY, template);
+      }
     } catch {
       // Ignore
     }
   },
 
   // --- HISTORIAL DE VENTAS ---
-  getSales(): Sale[] {
+  getSales(customSlug?: string): Sale[] {
     try {
-      const data = localStorage.getItem(SALES_STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+      const slug = customSlug || storeService.getActiveSlug();
+      const scopedData = localStorage.getItem(getScopedKey(SALES_STORAGE_KEY, slug));
+      if (scopedData) return JSON.parse(scopedData);
+      if (slug === 'bodega-jl') {
+        const legacyData = localStorage.getItem(SALES_STORAGE_KEY);
+        if (legacyData) return JSON.parse(legacyData);
+      }
+      return [];
     } catch {
       return [];
     }
   },
 
-  recordSale(sale: Sale): void {
+  recordSale(sale: Sale, customSlug?: string): void {
     try {
-      const sales = this.getSales();
-      localStorage.setItem(SALES_STORAGE_KEY, JSON.stringify([sale, ...sales.slice(0, 99)]));
+      const slug = customSlug || storeService.getActiveSlug();
+      const sales = this.getSales(slug);
+      const updated = [sale, ...sales.slice(0, 99)];
+      localStorage.setItem(getScopedKey(SALES_STORAGE_KEY, slug), JSON.stringify(updated));
+      if (slug === 'bodega-jl') {
+        localStorage.setItem(SALES_STORAGE_KEY, JSON.stringify(updated));
+      }
     } catch {
       // Storage error
     }
   },
 
   // --- CIERRES DE CAJA DIARIOS (REPORTE Z) ---
-  getDailyClosings(): DailyClosingReport[] {
+  getDailyClosings(customSlug?: string): DailyClosingReport[] {
     try {
-      const data = localStorage.getItem(CLOSINGS_STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+      const slug = customSlug || storeService.getActiveSlug();
+      const scopedData = localStorage.getItem(getScopedKey(CLOSINGS_STORAGE_KEY, slug));
+      if (scopedData) return JSON.parse(scopedData);
+      if (slug === 'bodega-jl') {
+        const legacyData = localStorage.getItem(CLOSINGS_STORAGE_KEY);
+        if (legacyData) return JSON.parse(legacyData);
+      }
+      return [];
     } catch {
       return [];
     }
   },
 
-  recordDailyClosing(closing: DailyClosingReport): void {
+  recordDailyClosing(closing: DailyClosingReport, customSlug?: string): void {
     try {
-      const closings = this.getDailyClosings();
-      localStorage.setItem(CLOSINGS_STORAGE_KEY, JSON.stringify([closing, ...closings.slice(0, 29)]));
+      const slug = customSlug || storeService.getActiveSlug();
+      const closings = this.getDailyClosings(slug);
+      const updated = [closing, ...closings.slice(0, 29)];
+      localStorage.setItem(getScopedKey(CLOSINGS_STORAGE_KEY, slug), JSON.stringify(updated));
+      if (slug === 'bodega-jl') {
+        localStorage.setItem(CLOSINGS_STORAGE_KEY, JSON.stringify(updated));
+      }
     } catch {
       // Storage error
     }
@@ -267,18 +354,21 @@ export const storageService = {
   },
 
   // --- PERFIL Y TELÉFONO DE LA BODEGA (MARCA BLANCA / MULTI-TENANT) ---
-  getStoreProfile(): StoreProfile {
+  getStoreProfile(customSlug?: string): StoreProfile {
     try {
-      const urlSlug = storeService.getStoreSlugFromUrl();
-      const data = localStorage.getItem('bogad_store_profile');
-      if (data) {
-        const parsed = JSON.parse(data);
-        const name = parsed.name || BODEGA_CONFIG.name;
-        const resolvedSlug = urlSlug || storeService.cleanSlug(parsed.slug || name || BODEGA_CONFIG.slug || 'bodega-jl');
+      const activeSlug = customSlug || storeService.getActiveSlug();
+      const scopedData = localStorage.getItem(`bogad_store_profile_${activeSlug}`);
+      const legacyData = activeSlug === 'bodega-jl' ? localStorage.getItem('bogad_store_profile') : null;
+      const rawData = scopedData || legacyData;
+
+      if (rawData) {
+        const parsed = JSON.parse(rawData);
+        const name = parsed.name || (activeSlug === 'bodega-jl' ? BODEGA_CONFIG.name : activeSlug);
+        const resolvedSlug = activeSlug;
         
         let resolvedCatalogUrl = parsed.catalogUrl;
         if (!resolvedCatalogUrl || resolvedCatalogUrl.includes('.onrender.com')) {
-          resolvedCatalogUrl = `https://${resolvedSlug}.onrender.com`;
+          resolvedCatalogUrl = storeService.getStoreShareUrl(resolvedSlug);
         }
 
         return {
@@ -303,33 +393,36 @@ export const storageService = {
           }
         };
       }
-      const defaultSlug = urlSlug || storeService.cleanSlug(BODEGA_CONFIG.name || BODEGA_CONFIG.slug || 'bodega-jl');
+
       return {
         ...BODEGA_CONFIG,
-        slug: defaultSlug,
-        catalogUrl: `https://${defaultSlug}.onrender.com`
+        name: activeSlug === 'bodega-jl' ? BODEGA_CONFIG.name : activeSlug,
+        slug: activeSlug,
+        catalogUrl: storeService.getStoreShareUrl(activeSlug)
       };
     } catch {
       return BODEGA_CONFIG;
     }
   },
 
-  saveStoreProfile(profile: Partial<StoreProfile>): StoreProfile {
+  saveStoreProfile(profile: Partial<StoreProfile>, customSlug?: string): StoreProfile {
     try {
-      const current = this.getStoreProfile();
+      const current = this.getStoreProfile(customSlug);
 
-      // Recalcular slug a partir del nombre de la tienda
+      // Recalcular slug a partir del nombre de la tienda o parámetro
       let newSlug = current.slug;
       if (profile.name && profile.name.trim()) {
         newSlug = storeService.cleanSlug(profile.name.trim());
       } else if (profile.slug && profile.slug.trim()) {
         newSlug = storeService.cleanSlug(profile.slug.trim());
+      } else if (customSlug && customSlug.trim()) {
+        newSlug = storeService.cleanSlug(customSlug.trim());
       }
 
       // Si la URL del catálogo está vacía o es un dominio de render, actualizar automáticamente con el nuevo nombre
       let finalCatalogUrl = profile.catalogUrl !== undefined ? profile.catalogUrl.trim() : current.catalogUrl;
       if (!finalCatalogUrl || finalCatalogUrl.includes('.onrender.com')) {
-        finalCatalogUrl = `https://${newSlug}.onrender.com`;
+        finalCatalogUrl = storeService.getStoreShareUrl(newSlug);
       }
 
       const updated: StoreProfile = {
@@ -351,7 +444,12 @@ export const storageService = {
           }
         } : current.payments
       };
-      localStorage.setItem('bogad_store_profile', JSON.stringify(updated));
+
+      // Guardar con prefijo de slug y en legacy si es bodega-jl
+      localStorage.setItem(`bogad_store_profile_${newSlug}`, JSON.stringify(updated));
+      if (newSlug === 'bodega-jl') {
+        localStorage.setItem('bogad_store_profile', JSON.stringify(updated));
+      }
 
       // 1. Notificar en la misma ventana/pestaña
       if (typeof window !== 'undefined') {
@@ -361,9 +459,13 @@ export const storageService = {
       // 2. Notificar a otras pestañas/ventanas abiertas mediante BroadcastChannel
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         try {
-          const profileChannel = new BroadcastChannel('bogad_store_channel');
-          profileChannel.postMessage({ type: 'STORE_PROFILE_UPDATED', profile: updated });
+          const profileChannel = new BroadcastChannel(`bogad_store_channel_${newSlug}`);
+          profileChannel.postMessage({ type: 'STORE_PROFILE_UPDATED', slug: newSlug, profile: updated });
           profileChannel.close();
+
+          const globalChannel = new BroadcastChannel('bogad_store_channel');
+          globalChannel.postMessage({ type: 'STORE_PROFILE_UPDATED', slug: newSlug, profile: updated });
+          globalChannel.close();
         } catch {
           // Ignorar
         }
