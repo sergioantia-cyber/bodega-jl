@@ -19,6 +19,9 @@ import { PaymentMethodsConfigModal } from './components/PaymentMethodsConfigModa
 import { AdminPinModal } from './components/AdminPinModal';
 import { StoreShareModal } from './components/StoreShareModal';
 import { TermsAndConditionsModal } from './components/TermsAndConditionsModal';
+import { DeliveryLoginModal } from './components/DeliveryLoginModal';
+import { RequestVehicleModal } from './components/RequestVehicleModal';
+import { DeliveryDashboardView } from './components/DeliveryDashboardView';
 import { TactileCard } from './components/ui/TactileCard';
 import { TactileButton } from './components/ui/TactileButton';
 import { VoiceSearchButton } from './components/VoiceSearchButton';
@@ -29,12 +32,15 @@ import { soundService } from './services/soundService';
 import { themeService } from './services/themeService';
 import { storeService } from './services/storeService';
 import { orderDispatchService } from './services/orderDispatchService';
+import { deliveryService } from './services/deliveryService';
 import { cloudStoreService, cloudProductService } from './services/supabaseClient';
 import { CATEGORIES, sortProducts } from './services/productData';
 import { Product, Customer, Sale, UserRole, CustomerOrder, CartItem, OrderStatus } from './types';
 
 export function App() {
-  const [role, setRole] = useState<UserRole>('customer');
+  const [role, setRole] = useState<UserRole>(() => {
+    return deliveryService.isAuthenticated() ? 'delivery' : 'customer';
+  });
   const [currentTab, setCurrentTab] = useState<NavTab>('catalog');
   const [products, setProducts] = useState<Product[]>(() => storageService.getProducts());
   const [customers, setCustomers] = useState<Customer[]>(() => storageService.getCustomers());
@@ -56,6 +62,8 @@ export function App() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState<boolean>(false);
   const [isAdminPinModalOpen, setIsAdminPinModalOpen] = useState<boolean>(false);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState<boolean>(false);
+  const [isDeliveryLoginOpen, setIsDeliveryLoginOpen] = useState<boolean>(false);
+  const [isRequestVehicleOpen, setIsRequestVehicleOpen] = useState<boolean>(false);
   const [storeProfile, setStoreProfile] = useState(() => storageService.getStoreProfile());
   const [isDark, setIsDark] = useState<boolean>(() => storageService.getTheme() === 'dark');
 
@@ -394,10 +402,24 @@ export function App() {
         onOpenCart={() => setIsCartOpen(true)}
         onOpenBrandCustomizer={() => setIsBrandCustomizerOpen(true)}
         onLockOwner={role === 'owner' ? handleLockOwner : undefined}
+        onOpenDeliveryLogin={() => setIsDeliveryLoginOpen(true)}
+        onOpenRequestVehicle={() => setIsRequestVehicleOpen(true)}
       />
 
       {/* Área Principal de Contenido */}
       <main className="flex-1 max-w-md mx-auto w-full px-4 pt-2.5 space-y-3">
+
+        {/* 0. VISTA EXCLUSIVA DE DOMICILIARIO (YOXMAN - RED PEDIGOCHOS) */}
+        {role === 'delivery' && (
+          <DeliveryDashboardView
+            onLogout={() => {
+              deliveryService.logout();
+              setRole('customer');
+              setCurrentTab('catalog');
+            }}
+            onOpenNewRideModal={() => setIsRequestVehicleOpen(true)}
+          />
+        )}
 
         {/* 1. VISTA PRINCIPAL DE VENTA (POS) - Solo Dueño */}
         {role === 'owner' && currentTab === 'pos' && (
@@ -458,6 +480,29 @@ export function App() {
                 {storeProfile.slogan || 'Elige tus productos y recíbelos en minutos con tu ubicación GPS en vivo.'}
               </p>
             </TactileCard>
+
+            {/* Banner de Pedigochos Express / Solicitar Vehículo */}
+            <div
+              onClick={() => setIsRequestVehicleOpen(true)}
+              className="p-3 bg-gradient-to-r from-amber-400 to-amber-300 border-2 border-slate-950 rounded-2xl shadow-tactile-sm flex items-center justify-between gap-3 cursor-pointer hover:scale-[1.01] active:translate-y-0.5 transition-transform"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-white border-2 border-slate-950 flex items-center justify-center shrink-0 shadow-tactile-xs">
+                  <span className="text-xl">🛵</span>
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-950 leading-tight">
+                    ¿Necesitas enviar un paquete o una carrera?
+                  </h4>
+                  <p className="text-[10px] font-bold text-slate-800">
+                    Solicita un vehículo con la red de Pedigochos
+                  </p>
+                </div>
+              </div>
+              <span className="text-[11px] font-black px-2.5 py-1 bg-white border-2 border-slate-950 rounded-xl text-slate-950 shrink-0 shadow-tactile-xs">
+                Pedir ➔
+              </span>
+            </div>
 
             {/* Buscador Táctil con Búsqueda por Voz */}
             <div className="flex items-center gap-2">
@@ -947,6 +992,23 @@ export function App() {
         onClose={() => setShowQRModal(false)}
         storeProfile={storeProfile}
         onProfileUpdated={(updated) => setStoreProfile(updated)}
+      />
+
+      {/* MODAL DE INICIO DE SESIÓN DOMICILIARIO (YOXMAN - PEDIGOCHOS) */}
+      <DeliveryLoginModal
+        isOpen={isDeliveryLoginOpen}
+        onClose={() => setIsDeliveryLoginOpen(false)}
+        onSuccess={() => {
+          setRole('delivery');
+          setCurrentTab('catalog');
+        }}
+      />
+
+      {/* MODAL DE SOLICITUD DE VEHÍCULO / CARRERA PEDIGOCHOS */}
+      <RequestVehicleModal
+        isOpen={isRequestVehicleOpen}
+        onClose={() => setIsRequestVehicleOpen(false)}
+        storeProfile={storeProfile}
       />
 
       {/* MODAL DE TÉRMINOS Y CONDICIONES LEGALES */}

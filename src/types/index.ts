@@ -35,7 +35,7 @@ export interface Customer {
 }
 
 export type PaymentMethod = 'cash' | 'transfer' | 'credit';
-export type UserRole = 'owner' | 'customer';
+export type UserRole = 'owner' | 'customer' | 'delivery';
 
 export interface Sale {
   id: string;
@@ -156,5 +156,50 @@ export interface StoreProfile {
   pedigochosPhone?: string;
   theme: StoreBrandTheme;
   payments: StorePaymentConfig;
+}
+
+// ==========================================
+// MÓDULO REPARTIDORES / DOMICILIARIOS PEDIGOCHOS
+// ==========================================
+
+export type RideStatus = 'available' | 'taken' | 'arrived_pickup' | 'in_transit' | 'completed' | 'cancelled';
+
+export interface VehicleRideRequest {
+  id: string;
+  code: string; // Ej: #VIAJE-4821
+  customerName: string;
+  customerPhone: string;
+  pickupAddress: string; // Dónde se recoge
+  dropoffAddress: string; // Destino
+  price: number; // Precio acordado del servicio
+  km: number; // Distancia estimada en kilómetros
+  notes?: string; // Indicaciones adicionales o paquete a llevar
+  paymentMethod: 'cash' | 'nequi' | 'transfer';
+  status: RideStatus;
+  driverId?: string; // 'yoxman'
+  driverName?: string; // 'Yoxman'
+  createdAt: string;
+  takenAt?: string;
+  completedAt?: string;
+  storeSlug?: string;
+}
+
+export interface DeliveryChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole: 'system' | 'driver' | 'customer' | 'pedigochos';
+  text: string;
+  timestamp: string;
+  isServiceCard?: boolean;
+  rideData?: VehicleRideRequest;
+}
+
+export interface DeliveryDailyFinance {
+  date: string;
+  completedRidesCount: number;
+  totalEarnings: number; // Total ganado hoy por el domiciliario
+  cashCollected: number; // Efectivo recaudado en mano
+  digitalCollected: number; // Recaudado por Nequi / Transferencia
 }
 
