@@ -25,8 +25,6 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   onSelectTab,
   onOpenCart
 }) => {
-  if (role === 'delivery') return null;
-
   // Pestañas para el Dueño
   const ownerTabs = [
     {

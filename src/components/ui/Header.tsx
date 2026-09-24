@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, Moon, Sun, WifiOff, Palette, Lock, Bike } from 'lucide-react';
+import { ShoppingBag, Moon, Sun, WifiOff, Palette, Lock } from 'lucide-react';
 import { TactileButton } from './TactileButton';
 import { UserRole, StoreProfile } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -14,8 +14,6 @@ interface HeaderProps {
   onOpenCart: () => void;
   onOpenBrandCustomizer?: () => void;
   onLockOwner?: () => void;
-  onOpenDeliveryLogin?: () => void;
-  onOpenRequestVehicle?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -27,9 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleTheme,
   onOpenCart,
   onOpenBrandCustomizer,
-  onLockOwner,
-  onOpenDeliveryLogin,
-  onOpenRequestVehicle
+  onLockOwner
 }) => {
   const profile = storeProfile || storageService.getStoreProfile();
 
@@ -58,15 +54,9 @@ export const Header: React.FC<HeaderProps> = ({
                   POS DUEÑO
                 </span>
               )}
-              {/* Badge para el Domiciliario */}
-              {role === 'delivery' && (
-                <span className="text-[9px] uppercase font-black px-1.5 py-0.5 border border-slate-900 rounded shadow-tactile-sm shrink-0 bg-bogad-lime text-slate-950">
-                  REPARTIDOR (YOXMAN)
-                </span>
-              )}
             </div>
             <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 leading-tight truncate">
-              {profile.slogan || (role === 'owner' ? 'Caja & Despacho GPS' : role === 'delivery' ? 'Red Domiciliarios Pedigochos' : 'Catálogo Virtual')}
+              {profile.slogan || (role === 'owner' ? 'Caja & Despacho GPS' : 'Catálogo Virtual')}
             </p>
           </div>
         </div>
@@ -78,36 +68,6 @@ export const Header: React.FC<HeaderProps> = ({
               <WifiOff className="w-3 h-3" />
               <span>Offline</span>
             </div>
-          )}
-
-          {/* Botón Pedir Moto / Vehículo Pedigochos */}
-          {role === 'customer' && onOpenRequestVehicle && (
-            <TactileButton
-              variant="primary"
-              size="sm"
-              onClick={onOpenRequestVehicle}
-              aria-label="Solicitar vehículo o domicilio"
-              className="h-9 px-2 flex items-center gap-1 text-xs font-black text-slate-950 shadow-tactile-sm"
-              title="Pedir Moto o Domicilio Pedigochos"
-            >
-              <span>🛵</span>
-              <span className="hidden sm:inline">Pedir Moto</span>
-            </TactileButton>
-          )}
-
-          {/* Botón de Acceso Domiciliarios Pedigochos */}
-          {role === 'customer' && onOpenDeliveryLogin && (
-            <TactileButton
-              variant="lime"
-              size="sm"
-              onClick={onOpenDeliveryLogin}
-              aria-label="Acceso domiciliarios Pedigochos"
-              className="h-9 px-2 flex items-center gap-1 text-xs font-black text-slate-950 bg-bogad-lime shadow-tactile-sm"
-              title="Acceso Repartidores Pedigochos (Yoxman)"
-            >
-              <Bike className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span className="hidden sm:inline">Repartidor</span>
-            </TactileButton>
           )}
 
           {/* Botón de Marca Blanca para el Dueño */}
